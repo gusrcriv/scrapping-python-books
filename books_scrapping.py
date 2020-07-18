@@ -2,6 +2,8 @@ from selenium import webdriver
 from bs4 import BeautifulSoup
 import pandas as pd
 from selenium.common.exceptions import NoSuchElementException
+import psycopg2
+
 
 driver = webdriver.Chrome('/usr/bin/chromedriver')
 
@@ -10,19 +12,26 @@ categories = []
 ratings = []
 prices = []
 in_stocks = []
-livros =[]
+books =[]
 driver.get("http://books.toscrape.com/")
 
 content = driver.page_source
 soup = BeautifulSoup(content, 'html.parser')
-livros = driver.find_element_by_xpath("//*[@id='default']/div/div/div/aside/div[2]/ul/li/ul").text.split('\n')
-livros = list(map(lambda x: x.replace(' ', '-'), livros))
-livros = list(map(str.lower, livros))
+books = driver.find_element_by_xpath("//*[@id='default']/div/div/div/aside/div[2]/ul/li/ul").text.split('\n')
+books = list(map(lambda x: x.replace(' ', '-'), books))
+books = list(map(str.lower, books))
 
-cont = 2
-for livro in livros:
-    cont = str(cont)
-    url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + cont + "/index.html")
+
+
+#Open database
+connection = psycopg2.connect(host="127.0.0.1", port ="5432", database="*****",user="*****",password="*****")
+connection.autocommit = True
+cursor = connection.cursor()
+
+counter = 2
+for livro in books:
+    counter = str(counter)
+    url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + counter + "/index.html")
     npag = 1
     try:
      npag = driver.find_element_by_xpath(
@@ -35,9 +44,9 @@ for livro in livros:
         item = str(item)
 
         if npag < 2 :
-            url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + cont + "/index.html")
+            url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + counter + "/index.html")
         else:
-            url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + cont + "/page-" + item +".html")
+            url = driver.get("http://books.toscrape.com/catalogue/category/books/" + livro + "_" + counter + "/page-" + item +".html")
 
         for a in soup.findAll('article'):
             name = a.find('img')
@@ -56,8 +65,18 @@ for livro in livros:
 
             categories.append(livro)
 
-    cont = int(cont)
-    cont = cont + 1
+            postgres_insert_query ="""INSERT INTO books.scrapping_books (name,price,rating,in_stock) VALUES (%s,%s,%s,%s)"""
+            record_to_insert = (name, rating, price, in_stock)
+
+            cursor.execute(postgres_insert_query, record_to_insert)
+
+
+    counter = int(counter)
+    counter = counter + 1
+
+cursor.close()
+connection.close()
+
 
 #Salvando o scrapping no Daframe
 data = pd.DataFrame()
